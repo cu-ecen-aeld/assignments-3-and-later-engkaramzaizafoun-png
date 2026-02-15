@@ -16,9 +16,19 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int ret = system(cmd);
 
-    return true;
-}
+    if (WIFEXITED(ret)) {
+        //cmd finished with success code
+        if (WEXITSTATUS(ret) == 0)
+            return true;   // نجاح
+        else
+            return false;  // cmd fail
+    } 
+    else {
+        // signal fail or firk/wait fail or shell fail
+        return false;}
+    }
 
 /**
 * @param count -The numbers of variables passed to the function. The variables are command to execute.
@@ -44,10 +54,14 @@ bool do_exec(int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
+    
+  
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
+    va_end(args);
+    
 
 /*
  * TODO:
@@ -58,10 +72,37 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    fflush(stdout);  // <-- prevent duplicate buffered output
+    int pid= fork();
+    if(pid < 0)
+    {
+        // fork failed
+        return false;
+    }
+    else if(pid == 0)
+    {
+        // child process
+     
+        execv(command[0], command);
+        // if execv fails
+        //perror("execv failed");
+           abort();
+    }
+    else
+    {
+        // parent process
+        int status;
+        waitpid(pid, &status, 0); //waitting child
+        
+      
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+            return true;
+        else
+            return false;
+    }
 
-    va_end(args);
 
-    return true;
+    return false;
 }
 
 /**
@@ -83,6 +124,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
+    va_end(args);
 
 
 /*
@@ -92,8 +134,37 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
-
-    va_end(args);
+   
+    int kidpid; 
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+     if (fd < 0) { perror("open"); abort(); } 
+     fflush(stdout);   // <-- prevent duplicate buffered output
+     switch (kidpid = fork()) { 
+     case -1: 
+        perror("fork"); 
+        abort(); 
+     case 0: 
+        if (dup2(fd, 1) < 0) 
+        { 
+           perror("dup2"); 
+           abort();
+        } 
+        close(fd); 
+        execvp(command[0], command); 
+        perror("execvp"); 
+        abort(); 
+     default: 
+        {
+          close(fd);
+      // parent process
+          int status;
+          waitpid(kidpid , &status, 0); 
+          if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+            return true;
+          else
+            return false;//waitting child
+        }
+      }
 
     return true;
 }
